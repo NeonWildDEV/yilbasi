@@ -82,7 +82,8 @@ function renderStats(stats) {
     currentStats = stats;
 
     document.getElementById("totalCount").textContent = `${stats.total_participants} Kişi`;
-    document.getElementById("budgetSpan").textContent = stats.budget_hint || "250 - 500 TL";
+    const budgetEl = document.getElementById("budgetSpan");
+    if (budgetEl) budgetEl.textContent = stats.budget_hint || "";
     document.getElementById("openedCount").textContent = `${stats.opened_count} / ${stats.total_participants}`;
 
     const liveStatusText = document.getElementById("liveStatusText");
