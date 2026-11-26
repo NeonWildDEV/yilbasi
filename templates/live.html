@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canlı Yayın Ekranı - 2026 Yılbaşı Çekilişi 🎁</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: radial-gradient(circle at 50% 10%, #1e1b4b 0%, #0f172a 60%, #030712 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .snow-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        /* Yılbaşı Işıkları */
+        .light-rope {
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10;
+            pointer-events: none;
+            height: 30px;
+        }
+        .light-bulb {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin: 0 15px;
+            animation: lightGlow 1.5s infinite alternate;
+        }
+        .light-red { background: #ef4444; box-shadow: 0 0 14px #ef4444; animation-delay: 0s; }
+        .light-yellow { background: #eab308; box-shadow: 0 0 14px #eab308; animation-delay: 0.3s; }
+        .light-green { background: #22c55e; box-shadow: 0 0 14px #22c55e; animation-delay: 0.6s; }
+        .light-blue { background: #3b82f6; box-shadow: 0 0 14px #3b82f6; animation-delay: 0.9s; }
+
+        @keyframes lightGlow {
+            from { opacity: 0.4; transform: scale(0.85); }
+            to { opacity: 1; transform: scale(1.15); }
+        }
+
+        .gold-glow {
+            text-shadow: 0 0 20px rgba(250, 204, 21, 0.6), 0 0 40px rgba(239, 68, 68, 0.4);
+        }
+        
+        .card-pop {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.7); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .shake-box {
+            animation: shake 0.5s infinite ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-8deg) scale(1.05); }
+            75% { transform: rotate(8deg) scale(1.05); }
+        }
+    </style>
+</head>
+<body class="relative flex flex-col justify-between p-6">
+    <canvas id="snowCanvas" class="snow-canvas"></canvas>
+
+    <!-- Üst Yılbaşı Işıkları -->
+    <div class="light-rope">
+        <span class="light-bulb light-red"></span>
+        <span class="light-bulb light-yellow"></span>
+        <span class="light-bulb light-green"></span>
+        <span class="light-bulb light-blue"></span>
+        <span class="light-bulb light-red"></span>
+        <span class="light-bulb light-yellow"></span>
+        <span class="light-bulb light-green"></span>
+        <span class="light-bulb light-blue"></span>
+        <span class="light-bulb light-red"></span>
+        <span class="light-bulb light-yellow"></span>
+        <span class="light-bulb light-green"></span>
+        <span class="light-bulb light-blue"></span>
+        <span class="light-bulb light-red"></span>
+        <span class="light-bulb light-yellow"></span>
+        <span class="light-bulb light-green"></span>
+        <span class="light-bulb light-blue"></span>
+    </div>
+
+    <!-- Canlı Yayın Başlık Bölümü -->
+    <header class="w-full text-center py-4 z-10">
+        <div class="inline-flex items-center gap-2 bg-red-600/20 border border-red-500/40 px-4 py-1.5 rounded-full text-xs font-bold text-red-400 mb-3 shadow-lg">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span> CANLI YAYIN
+        </div>
+        <h1 class="text-3xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-amber-200 to-emerald-400 gold-glow">
+            🎄 inavitas 2026 YILBAŞI GİZLİ HEDİYE ÇEKİLİŞİ 🎁
+        </h1>
+        <p class="text-sm md:text-base text-gray-300 mt-2 font-medium">
+            Herkes 1 kişiye hediye alacak • Sürpriz ve gizli eşleşme!
+        </p>
+
+        <!-- Canlı İstatistik Göstergeleri -->
+        <div class="flex flex-wrap justify-center gap-4 mt-5">
+            <div class="bg-slate-900/80 border border-amber-500/40 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
+                <span class="text-2xl">👥</span>
+                <div class="text-left">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Kayıtlı Katılımcı</div>
+                    <div class="text-xl font-extrabold text-amber-300" id="totalCount">0 Kişi</div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/80 border border-emerald-500/40 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
+                <span class="text-2xl">💰</span>
+                <div class="text-left">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Önerilen Bütçe</div>
+                    <div class="text-lg font-extrabold text-emerald-400" id="budgetSpan">250 - 500 TL</div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/80 border border-blue-500/40 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
+                <span class="text-2xl">✉️</span>
+                <div class="text-left">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Açılan Zarflar</div>
+                    <div class="text-lg font-extrabold text-blue-400" id="openedCount">0 / 0</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Katılımcılar Canlı Tablosu -->
+    <main class="w-full max-w-6xl mx-auto my-6 z-10 flex-1">
+        <div class="bg-slate-900/60 backdrop-blur-lg border border-slate-800 rounded-3xl p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🎅</span>
+                    <h2 class="text-lg font-bold text-white">Canlı Katılımcı Listesi</h2>
+                </div>
+                <div id="liveStatusText" class="text-xs font-semibold px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                    Kura Çekimi Bekleniyor...
+                </div>
+            </div>
+
+            <!-- Katılımcı Kartları Grid -->
+            <div id="participantsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                <!-- JS ile dolacak -->
+            </div>
+
+            <div id="emptyListState" class="text-center py-12 text-gray-500 text-sm hidden">
+                Henüz katılımcı kaydolmadı. Kayıt ekranından kayıtlar bekleniyor...
+            </div>
+        </div>
+    </main>
+
+    <!-- Canlı Bildirim / Toast Akışı -->
+    <div id="liveToast" class="fixed bottom-6 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-900/95 border border-yellow-400/80 shadow-2xl rounded-2xl px-5 py-3.5 flex items-center gap-3">
+        <span class="text-2xl" id="toastIcon">🎁</span>
+        <div>
+            <div class="text-xs font-bold text-yellow-400" id="toastTitle">Yeni Katılımcı!</div>
+            <div class="text-sm font-semibold text-white" id="toastMsg">Ahmet Yılmaz çekilişe katıldı!</div>
+        </div>
+    </div>
+
+    <!-- KURA ÇEKİMİ ANİMASYON OVERLAY (Admin Başlattığında Ekranda Patlar) -->
+    <div id="drawOverlay" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center hidden p-6 text-center">
+        <!-- 1. Karıştırma Aşaması -->
+        <div id="drawMixingStage" class="space-y-6">
+            <div class="text-8xl md:text-9xl shake-box">🎁</div>
+            <h2 class="text-2xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-200 to-green-400">
+                SİHİRLİ YILBAŞI TORBASI KARIŞTIRILIYOR! 🎅✨
+            </h2>
+            <p class="text-base text-gray-300 max-w-lg mx-auto">
+                Kişiye özel gizli eşleşmeler hesaplanıyor... Kimse kendine çıkmayacak, herkes tam bir kişiye hediye alacak!
+            </p>
+            <div class="text-6xl font-black text-yellow-400" id="countdownTimer">4</div>
+        </div>
+
+        <!-- 2. Tamamlandı Aşaması -->
+        <div id="drawCompletedStage" class="hidden space-y-6 max-w-xl">
+            <div class="text-8xl animate-bounce">🎉</div>
+            <h2 class="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-200 to-yellow-500 gold-glow">
+                KURALAR ÇEKİLDİ! 🎁
+            </h2>
+            <div class="p-6 bg-slate-900/90 border-2 border-yellow-400/80 rounded-3xl shadow-2xl">
+                <p class="text-lg font-bold text-white mb-2">Tüm Zarflar Mühürlendi ve Dağıtıldı!</p>
+                <p class="text-sm text-gray-300">
+                    Sürprizin bozulmaması için canlı ekranda isimler eşleştirilmedi. Herkes kendi hesabına giriş yaparak kime hediye alacağını görebilir!
+                </p>
+            </div>
+            <button id="closeOverlayBtn" class="px-8 py-3.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-extrabold rounded-2xl shadow-xl transition">
+                Canlı Ekrana Dön 🎄
+            </button>
+        </div>
+    </div>
+
+    <!-- Alt Bilgi -->
+    <footer class="w-full text-center py-2 text-xs text-gray-500 z-10">
+        OBS & Canlı Yayın Ekranı • Otomatik Gerçek Zamanlı Güncelleme
+    </footer>
+
+    <!-- Kar Taneleri & Canlı Script -->
+    <script>
+        const canvas = document.getElementById("snowCanvas");
+        const ctx = canvas.getContext("2d");
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        window.addEventListener("resize", () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+
+        const flakes = Array.from({ length: 70 }, () => ({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            radius: Math.random() * 3 + 1,
+            speed: Math.random() * 1.2 + 0.6,
+            wind: Math.random() * 0.6 - 0.3
+        }));
+
+        function drawSnow() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+            ctx.beginPath();
+            for (let f of flakes) {
+                ctx.moveTo(f.x, f.y);
+                ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+                f.y += f.speed;
+                f.x += f.wind;
+                if (f.y > height) { f.y = 0; f.x = Math.random() * width; }
+                if (f.x > width) f.x = 0;
+                if (f.x < 0) f.x = width;
+            }
+            ctx.fill();
+            requestAnimationFrame(drawSnow);
+        }
+        drawSnow();
+    </script>
+    <script src="/static/js/live.js"></script>
+</body>
+</html>
