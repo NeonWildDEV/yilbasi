@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Yönetim Paneli - Yılbaşı Çekilişi 🎁</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body class="p-6">
+    <div class="max-w-5xl mx-auto">
+
+        <!-- Başlık -->
+        <header class="flex flex-wrap justify-between items-center pb-6 mb-6 border-b border-slate-800 gap-4">
+            <div>
+                <h1 class="text-2xl font-black text-amber-400 flex items-center gap-2">
+                    <span>⚙️</span> Yılbaşı Çekiliş Yönetim Paneli
+                </h1>
+                <p class="text-xs text-gray-400 mt-1">Katılımcı kontrolü, kura başlatma ve eşleşme yönetimi</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/live" target="_blank" class="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl text-xs flex items-center gap-1 shadow">
+                    🔴 Canlı Yayını Aç
+                </a>
+                <a href="/" target="_blank" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-gray-200 font-semibold rounded-xl text-xs border border-slate-700">
+                    👥 Katılımcı Sayfası
+                </a>
+            </div>
+        </header>
+
+        <!-- Giriş Bölümü (Şifre Girilmemişse) -->
+        <div id="loginCard" class="max-w-md mx-auto bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl text-center">
+            <span class="text-4xl mb-3 inline-block">🔒</span>
+            <h2 class="text-xl font-bold mb-2">Admin Girişi</h2>
+            <p class="text-xs text-gray-400 mb-6">Varsayılan admin şifresi: <code class="text-amber-400">admin123</code></p>
+            <form id="adminLoginForm" class="space-y-4">
+                <input type="password" id="adminPasswordInput" placeholder="Admin şifresi" required
+                       class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400">
+                <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-xl shadow transition">
+                    Giriş Yap
+                </button>
+            </form>
+            <div id="loginAlert" class="mt-4 text-xs font-semibold text-red-400 hidden"></div>
+        </div>
+
+        <!-- Yönetim Paneli İçeriği (Giriş Yapılmışsa) -->
+        <div id="panelCard" class="hidden space-y-6">
+
+            <!-- Aksiyon & Durum Butonları -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Durum Kartı -->
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <span class="text-xs text-gray-400 uppercase tracking-widest font-bold">Kura Durumu</span>
+                        <div class="text-2xl font-black mt-1" id="drawStatusText">Bekleniyor</div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-400">
+                        Toplam: <span id="totalUsersCount" class="font-bold text-white">0</span> katılımcı
+                    </div>
+                </div>
+
+                <!-- Test Verisi Ekleme -->
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <span class="text-xs text-gray-400 uppercase tracking-widest font-bold">Hızlı Hazırlık</span>
+                        <div class="text-sm font-semibold text-gray-200 mt-1">22 Örnek Katılımcı Ekle</div>
+                    </div>
+                    <button id="addTestUsersBtn" class="mt-3 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition">
+                        👥 22 Test Kişisi Ekle
+                    </button>
+                </div>
+
+                <!-- Kura Çekim Aksiyonu -->
+                <div class="bg-slate-900/90 border border-amber-500/40 p-5 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <span class="text-xs text-amber-400 uppercase tracking-widest font-bold">Ana Aksiyon</span>
+                        <div class="text-sm font-semibold text-white mt-1">Canlı Yayında Kura Çek</div>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button id="startDrawBtn" class="flex-1 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-extrabold rounded-xl shadow transition">
+                            🎲 Çekilişi Başlat
+                        </button>
+                        <button id="resetDrawBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-gray-300 text-xs font-semibold rounded-xl border border-slate-700 transition" title="Kuraları Sıfırla">
+                            🔄 Sıfırla
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Katılımcılar Tablosu -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span>📋</span> Kayıtlı Katılımcılar (<span id="userListCount">0</span>)
+                    </h3>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="text-gray-400 uppercase border-b border-slate-800">
+                            <tr>
+                                <th class="py-3 px-3">Katılımcı</th>
+                                <th class="py-3 px-3">Kullanıcı Adı</th>
+                                <th class="py-3 px-3">Hediye İpuçları</th>
+                                <th class="py-3 px-3">Zarf Durumu</th>
+                                <th class="py-3 px-3 text-right">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="divide-y divide-slate-800/60 text-gray-300">
+                            <!-- JS ile dolacak -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Gizli Eşleşmeler Denetleme Alanı -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <span>🤫</span> Gizli Kura Eşleşmeleri
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">
+                            Sürprizi bozmamak için varsayılan olarak gizlidir.
+                        </p>
+                    </div>
+                    <button id="toggleMatchesBtn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-xl text-xs font-bold transition">
+                        👁️ Eşleşmeleri Göster / Gizle
+                    </button>
+                </div>
+
+                <div id="matchesContainer" class="hidden mt-6 pt-6 border-t border-slate-800">
+                    <div id="matchesEmpty" class="text-xs text-gray-500 italic">Henüz çekiliş yapılmadı.</div>
+                    <div id="matchesGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        <!-- JS ile dolacak -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            initAdmin();
+        });
+
+        async function initAdmin() {
+            setupAdminAuth();
+            loadOverview();
+        }
+
+        function setupAdminAuth() {
+            const form = document.getElementById("adminLoginForm");
+            const alertEl = document.getElementById("loginAlert");
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const password = document.getElementById("adminPasswordInput").value;
+
+                try {
+                    const res = await fetch("/api/admin/login", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ password })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail || "Giriş başarısız");
+
+                    alertEl.classList.add("hidden");
+                    loadOverview();
+                } catch (err) {
+                    alertEl.textContent = err.message;
+                    alertEl.classList.remove("hidden");
+                }
+            });
+        }
+
+        async function loadOverview() {
+            try {
+                const res = await fetch("/api/admin/overview");
+                if (res.status === 403) {
+                    document.getElementById("loginCard").classList.remove("hidden");
+                    document.getElementById("panelCard").classList.add("hidden");
+                    return;
+                }
+
+                const data = await res.json();
+                document.getElementById("loginCard").classList.add("hidden");
+                document.getElementById("panelCard").classList.remove("hidden");
+
+                renderOverview(data);
+            } catch (e) {
+                console.error("Overview error:", e);
+            }
+        }
+
+        function renderOverview(data) {
+            document.getElementById("totalUsersCount").textContent = data.users.length;
+            document.getElementById("userListCount").textContent = data.users.length;
+
+            const statusText = document.getElementById("drawStatusText");
+            if (data.is_drawn) {
+                statusText.textContent = "Kura Çekildi 🎉";
+                statusText.className = "text-2xl font-black mt-1 text-emerald-400";
+            } else {
+                statusText.textContent = "Bekleniyor ⏳";
+                statusText.className = "text-2xl font-black mt-1 text-amber-400";
+            }
+
+            // Tabloyu doldur
+            const tbody = document.getElementById("usersTableBody");
+            tbody.innerHTML = "";
+
+            data.users.forEach(u => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="py-3 px-3 font-semibold text-white flex items-center gap-2">
+                        <span class="text-lg">${u.avatar_icon || "🎅"}</span>
+                        <span>${escapeHtml(u.display_name)}</span>
+                    </td>
+                    <td class="py-3 px-3 text-gray-400">${escapeHtml(u.username)}</td>
+                    <td class="py-3 px-3 text-gray-300 italic max-w-xs truncate">${escapeHtml(u.wishlist || "-")}</td>
+                    <td class="py-3 px-3">
+                        ${u.has_opened_envelope 
+                            ? '<span class="text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800">Açtı ✉️</span>' 
+                            : '<span class="text-gray-400 bg-slate-800 px-2 py-0.5 rounded-full">Mühürlü</span>'}
+                    </td>
+                    <td class="py-3 px-3 text-right">
+                        <button onclick="deleteUser(${u.id})" class="text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-950 transition">Sil</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Eşleşmeler
+            const matchesGrid = document.getElementById("matchesGrid");
+            const matchesEmpty = document.getElementById("matchesEmpty");
+            matchesGrid.innerHTML = "";
+
+            if (!data.is_drawn || data.matches.length === 0) {
+                matchesEmpty.classList.remove("hidden");
+            } else {
+                matchesEmpty.classList.add("hidden");
+                data.matches.forEach(m => {
+                    const card = document.createElement("div");
+                    card.className = "p-3 bg-slate-800/80 border border-slate-700 rounded-xl flex items-center justify-between text-xs";
+                    card.innerHTML = `
+                        <span class="font-bold text-white">${escapeHtml(m.giver_name)}</span>
+                        <span class="text-amber-400 font-extrabold mx-2">🎁 ➔</span>
+                        <span class="font-bold text-emerald-400">${escapeHtml(m.receiver_name)}</span>
+                    `;
+                    matchesGrid.appendChild(card);
+                });
+            }
+        }
+
+        // Aksiyon Butonları
+        document.getElementById("addTestUsersBtn").addEventListener("click", async () => {
+            if (confirm("22 örnek katılımcı eklensin mi?")) {
+                const res = await fetch("/api/admin/add-test-users", { method: "POST" });
+                if (res.ok) {
+                    alert("Örnek kullanıcılar eklendi!");
+                    loadOverview();
+                }
+            }
+        });
+
+        document.getElementById("startDrawBtn").addEventListener("click", async () => {
+            if (confirm("Yılbaşı kura çekimini başlatmak istediğinize emin misiniz? Canlı yayında animasyon başlatılacaktır.")) {
+                try {
+                    const res = await fetch("/api/admin/draw", { method: "POST" });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail || "Kura çekimi başarısız");
+                    alert("Kuralar başarıyla çekildi ve canlı yayına iletildi!");
+                    loadOverview();
+                } catch (e) {
+                    alert(e.message);
+                }
+            }
+        });
+
+        document.getElementById("resetDrawBtn").addEventListener("click", async () => {
+            if (confirm("Kuraları sıfırlamak istediğinize emin misiniz?")) {
+                const res = await fetch("/api/admin/reset", { method: "POST" });
+                if (res.ok) {
+                    alert("Kuralar sıfırlandı!");
+                    loadOverview();
+                }
+            }
+        });
+
+        document.getElementById("toggleMatchesBtn").addEventListener("click", () => {
+            const container = document.getElementById("matchesContainer");
+            container.classList.toggle("hidden");
+        });
+
+        async function deleteUser(userId) {
+            if (confirm("Bu katılımcıyı silmek istediğinize emin misiniz?")) {
+                const res = await fetch(`/api/admin/user/${userId}`, { method: "DELETE" });
+                if (res.ok) loadOverview();
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return "";
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yılbaşı Gizli Hediye Çekilişi 🎁</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: radial-gradient(circle at 50% 20%, #1e3a8a, #0f172a 80%);
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+        .snow-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .envelope-box {
+            perspective: 1000px;
+        }
+        .wax-seal {
+            background: radial-gradient(circle, #dc2626 40%, #991b1b 100%);
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.6);
+        }
+        .gold-border {
+            border: 2px solid #fbbf24;
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.4);
+        }
+        .pulse-anim {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.04); }
+        }
+    </style>
+</head>
+<body class="relative flex flex-col justify-between items-center p-4">
+    <canvas id="snowCanvas" class="snow-canvas"></canvas>
+
+    <!-- Üst Başlık & Linkler -->
+    <header class="w-full max-w-2xl flex justify-between items-center py-4 z-10 border-b border-blue-900/40">
+        <div class="flex items-center gap-2">
+            <span class="text-3xl">🎄</span>
+            <h1 class="text-xl md:text-2xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-200 to-green-400">
+                inavitas Yılbaşı Çekilişi
+            </h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/live" target="_blank" class="text-xs bg-red-600 hover:bg-red-500 text-white font-semibold px-3 py-1.5 rounded-full shadow transition flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-white animate-ping"></span> Canlı Yayın
+            </a>
+            <button id="logoutBtn" class="hidden text-xs text-gray-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">Çıkış</button>
+        </div>
+    </header>
+
+    <!-- Ana İçerik Alanı -->
+    <main class="w-full max-w-xl my-auto py-8 z-10">
+
+        <!-- 1. GİRİŞ & KAYIT KARTI (Giriş Yapılmamışsa) -->
+        <div id="authSection" class="bg-slate-900/80 backdrop-blur-md rounded-3xl p-6 md:p-8 gold-border shadow-2xl">
+            <div class="flex justify-center mb-6 border-b border-slate-700 pb-3 gap-6">
+                <button id="tabRegister" class="text-lg font-bold text-yellow-400 border-b-2 border-yellow-400 pb-1 transition">Kayıt Ol</button>
+                <button id="tabLogin" class="text-lg font-bold text-gray-400 hover:text-white pb-1 transition">Giriş Yap</button>
+            </div>
+
+            <!-- Kayıt Formu -->
+            <form id="registerForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Adın Soyadın (Listede görünecek isim):</label>
+                    <input type="text" id="regDisplayName" required placeholder="Örn: Ahmet Yılmaz" 
+                           class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-yellow-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Kullanıcı Adı (Giriş için):</label>
+                    <input type="text" id="regUsername" required placeholder="Örn: ahmetyilmaz" 
+                           class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-yellow-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Şifre:</label>
+                    <input type="password" id="regPassword" required placeholder="En az 4 karakter" 
+                           class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-yellow-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Yılbaşı Avatarın:</label>
+                    <div class="flex gap-2 justify-center py-2 bg-slate-800/60 rounded-xl" id="avatarSelector">
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg bg-yellow-500/20 ring-2 ring-yellow-400" data-avatar="🎅">🎅</button>
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg hover:bg-slate-700" data-avatar="🦌">🦌</button>
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg hover:bg-slate-700" data-avatar="🎄">🎄</button>
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg hover:bg-slate-700" data-avatar="⛄">⛄</button>
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg hover:bg-slate-700" data-avatar="🎁">🎁</button>
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg hover:bg-slate-700" data-avatar="⭐">⭐</button>
+                        <button type="button" class="avatar-opt text-2xl p-2 rounded-lg hover:bg-slate-700" data-avatar="🧦">🧦</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Hediye İpuçların (İsteğe bağlı):</label>
+                    <textarea id="regWishlist" rows="2" placeholder="Sana hediye alacak kişiye ufak bir ipucu: Sevdiğin şeyler, kitap, kahve vb."
+                              class="w-full px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-yellow-400"></textarea>
+                </div>
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl shadow-lg transition">
+                    Çekilişe Katıl 🎁
+                </button>
+            </form>
+
+            <!-- Giriş Formu -->
+            <form id="loginForm" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Kullanıcı Adı:</label>
+                    <input type="text" id="loginUsername" required placeholder="Kullanıcı adınız" 
+                           class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-yellow-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Şifre:</label>
+                    <input type="password" id="loginPassword" required placeholder="Şifreniz" 
+                           class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-yellow-400">
+                </div>
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold rounded-xl shadow-lg transition">
+                    Giriş Yap 🎄
+                </button>
+            </form>
+
+            <div id="authAlert" class="mt-4 hidden p-3 rounded-xl text-center text-sm font-semibold"></div>
+        </div>
+
+        <!-- 2. KULLANICI ÖZEL PANELİ (Giriş Yapılmışsa) -->
+        <div id="dashboardSection" class="hidden space-y-6">
+
+            <!-- Kullanıcı Karşılama Kartı -->
+            <div class="bg-slate-900/80 backdrop-blur-md rounded-3xl p-6 gold-border shadow-xl text-center relative overflow-hidden">
+                <div class="text-4xl mb-2" id="userAvatar">🎅</div>
+                <h2 class="text-xl font-bold text-white">Hoş Geldin, <span id="userDisplayName" class="text-yellow-400"></span>!</h2>
+                <p class="text-xs text-gray-400 mt-1" id="drawStatusBadge">Çekiliş Durumu: Canlı yayın bekleniyor...</p>
+                <div class="mt-3 text-xs text-emerald-400 bg-emerald-950/60 inline-block px-3 py-1 rounded-full border border-emerald-800">
+                    Önerilen Hediye Bütçesi: <span id="budgetDisplay">250 - 500 TL</span>
+                </div>
+            </div>
+
+            <!-- ÇEKİLİŞ HENÜZ YAPILMAMIŞSA GÖRÜNECEK ALAN -->
+            <div id="waitingDrawBox" class="bg-slate-900/70 rounded-3xl p-6 text-center border border-slate-800 shadow-xl space-y-4">
+                <div class="text-5xl animate-bounce">⏳</div>
+                <h3 class="text-lg font-bold text-yellow-300">Kaydın Başarıyla Alındı!</h3>
+                <p class="text-sm text-gray-300">
+                    Yılbaşı kura çekimi canlı yayında gerçekleştirilecek. Kuralar çekildiğinde bu ekranda sana özel gizli zarfın belirecek!
+                </p>
+                <a href="/live" target="_blank" class="inline-block px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl text-sm shadow-md transition">
+                    🔴 Canlı Yayın Ekranını Aç
+                </a>
+
+                <!-- Hediye İpuçları Güncelleme -->
+                <div class="mt-6 pt-6 border-t border-slate-800 text-left">
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">🎁 Sana Hediye Alacak Kişiye İpuçların:</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="dashWishlist" placeholder="Örn: Bilim kurgu kitabı veya kahve kupası..."
+                               class="flex-1 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-yellow-400">
+                        <button id="saveWishlistBtn" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition">Kaydet</button>
+                    </div>
+                    <span id="wishlistSaveMsg" class="text-xs text-green-400 mt-1 hidden block">İpuçların kaydedildi!</span>
+                </div>
+            </div>
+
+            <!-- ÇEKİLİŞ YAPILDIKTAN SONRA GÖRÜNECEK ALAN -->
+            <div id="drawnBox" class="hidden space-y-6">
+
+                <!-- 1. Zarf Henüz Açılmamışsa -->
+                <div id="sealedEnvelopeView" class="text-center bg-slate-900/90 rounded-3xl p-8 gold-border shadow-2xl envelope-box">
+                    <span class="text-xs uppercase tracking-widest text-yellow-400 font-bold">Kura Sonucu Hazır</span>
+                    <h3 class="text-2xl font-extrabold text-white mt-1 mb-6">Mühürlü Yılbaşı Zarfın Geldi!</h3>
+                    
+                    <div class="w-44 h-32 mx-auto bg-gradient-to-b from-amber-100 to-amber-200 text-slate-900 rounded-2xl shadow-2xl relative flex flex-col justify-center items-center pulse-anim cursor-pointer border-4 border-amber-300" id="envelopeClickArea">
+                        <div class="w-14 h-14 rounded-full wax-seal flex items-center justify-center text-white font-extrabold text-2xl shadow-inner">
+                            🎄
+                        </div>
+                        <span class="text-[11px] font-bold text-amber-900 mt-2">GİZLİ & ÖZEL</span>
+                    </div>
+
+                    <p class="text-xs text-gray-400 mt-6 mb-4">
+                        Aşağıdaki butona tıklayarak kime hediye alacağını öğrenebilirsin.
+                    </p>
+
+                    <button id="openEnvelopeBtn" class="w-full py-4 bg-gradient-to-r from-red-600 via-amber-500 to-red-600 hover:scale-105 transition-all text-white font-extrabold text-base rounded-2xl shadow-xl shadow-red-900/40">
+                        ✉️ ZARFI AÇ VE HEDİYE ALACAĞIN KİŞİYİ GÖR
+                    </button>
+                </div>
+
+                <!-- 2. Zarf Açıldıktan Sonraki Sonuç Kartı -->
+                <div id="revealedResultView" class="hidden text-center bg-gradient-to-b from-slate-900 to-slate-950 rounded-3xl p-8 gold-border shadow-2xl relative overflow-hidden">
+                    <div class="absolute -top-10 -right-10 w-32 h-32 bg-yellow-500/10 rounded-full blur-2xl"></div>
+                    <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-red-500/10 rounded-full blur-2xl"></div>
+
+                    <span class="text-xs font-bold uppercase tracking-widest text-emerald-400">✨ Tebrikler, Eşleşmen Tamamlandı! ✨</span>
+                    <h4 class="text-sm text-gray-300 mt-2">Yılbaşında Hediye Alacağın Şanslı Kişi:</h4>
+
+                    <div class="my-6 p-6 bg-slate-800/90 rounded-2xl border border-yellow-500/50 shadow-inner">
+                        <div class="text-6xl mb-2" id="targetAvatar">🎁</div>
+                        <h2 class="text-3xl md:text-4xl font-extrabold text-yellow-300 tracking-wide" id="targetName">
+                            Mehmet Kaya
+                        </h2>
+                    </div>
+
+                    <!-- Hedef Kişinin İpuçları -->
+                    <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 text-left mb-6">
+                        <span class="text-xs font-bold text-yellow-400 flex items-center gap-1">
+                            💡 <span id="targetNameShort">Onun</span> Hediye İpuçları & İlgi Alanları:
+                        </span>
+                        <p class="text-sm text-gray-200 mt-1 italic" id="targetWishlist">
+                            "Henüz bir ipucu eklenmemiş, güzel bir sürpriz seçebilirsin!"
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-red-950/50 border border-red-800/50 rounded-xl text-xs text-red-200 flex items-center justify-center gap-2">
+                        <span>🤫</span> <strong>Şşşt! Sakın kimseye söyleme, sürpriz yılbaşına kadar gizli kalsın!</strong>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Alt Bilgi -->
+    <footer class="w-full max-w-2xl text-center py-4 text-xs text-gray-500 z-10 border-t border-slate-800">
+        2026 Yılbaşı Gizli Hediyeleşme Sistemi • Gizli & Adil Kura Algoritması
+    </footer>
+
+    <!-- Sesler için Web Audio API Sentezleyici -->
+    <script>
+        // Karlar animasyonu
+        const canvas = document.getElementById("snowCanvas");
+        const ctx = canvas.getContext("2d");
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        window.addEventListener("resize", () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+
+        const flakes = Array.from({ length: 45 }, () => ({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            radius: Math.random() * 2.5 + 1,
+            speed: Math.random() * 1 + 0.5,
+            wind: Math.random() * 0.5 - 0.25
+        }));
+
+        function drawSnow() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+            ctx.beginPath();
+            for (let f of flakes) {
+                ctx.moveTo(f.x, f.y);
+                ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+                f.y += f.speed;
+                f.x += f.wind;
+                if (f.y > height) { f.y = 0; f.x = Math.random() * width; }
+                if (f.x > width) f.x = 0;
+                if (f.x < 0) f.x = width;
+            }
+            ctx.fill();
+            requestAnimationFrame(drawSnow);
+        }
+        drawSnow();
+
+        // Ses Efekti (Web Audio API)
+        function playChime() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.6);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + i * 0.12);
+                    osc.stop(ctx.currentTime + i * 0.12 + 0.7);
+                });
+            } catch(e) {}
+        }
+    </script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
