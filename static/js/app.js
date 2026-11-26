@@ -71,7 +71,8 @@ function setupForms() {
         const display_name = document.getElementById("regDisplayName").value;
         const username = document.getElementById("regUsername").value;
         const password = document.getElementById("regPassword").value;
-        const wishlist = document.getElementById("regWishlist").value;
+        const regWishlistEl = document.getElementById("regWishlist");
+        const wishlist = regWishlistEl ? regWishlistEl.value : "";
 
         try {
             const res = await fetch("/api/register", {
