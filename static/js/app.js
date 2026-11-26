@@ -177,7 +177,8 @@ async function checkAuth() {
         document.getElementById("userDisplayName").textContent = data.user.display_name;
         const dashWish = document.getElementById("dashWishlist");
         if (dashWish) dashWish.value = data.user.wishlist || "";
-        document.getElementById("budgetDisplay").textContent = data.budget_hint || "250 - 500 TL";
+        const budgetEl = document.getElementById("budgetDisplay");
+        if (budgetEl) budgetEl.textContent = data.budget_hint || "";
 
         const waitingDrawBox = document.getElementById("waitingDrawBox");
         const drawnBox = document.getElementById("drawnBox");
