@@ -175,7 +175,8 @@ async function checkAuth() {
         // Kullanıcı bilgileri
         document.getElementById("userAvatar").textContent = data.user.avatar_icon || "🎅";
         document.getElementById("userDisplayName").textContent = data.user.display_name;
-        document.getElementById("dashWishlist").value = data.user.wishlist || "";
+        const dashWish = document.getElementById("dashWishlist");
+        if (dashWish) dashWish.value = data.user.wishlist || "";
         document.getElementById("budgetDisplay").textContent = data.budget_hint || "250 - 500 TL";
 
         const waitingDrawBox = document.getElementById("waitingDrawBox");
@@ -207,11 +208,15 @@ async function checkAuth() {
                 document.getElementById("targetName").textContent = data.receiver.display_name;
                 document.getElementById("targetNameShort").textContent = data.receiver.display_name.split(" ")[0];
 
+                const wishBox = document.getElementById("targetWishlistBox");
                 const wishEl = document.getElementById("targetWishlist");
-                if (data.receiver.wishlist && data.receiver.wishlist.trim()) {
-                    wishEl.textContent = `"${data.receiver.wishlist}"`;
-                } else {
-                    wishEl.textContent = '"Henüz bir ipucu belirtilmemiş, gönlünden kopan güzel bir sürpriz seçebilirsin!"';
+                if (wishBox && wishEl) {
+                    if (data.receiver.wishlist && data.receiver.wishlist.trim()) {
+                        wishEl.textContent = `"${data.receiver.wishlist}"`;
+                        wishBox.classList.remove("hidden");
+                    } else {
+                        wishBox.classList.add("hidden");
+                    }
                 }
             }
         }
