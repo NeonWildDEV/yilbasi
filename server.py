@@ -477,6 +477,26 @@ async def delete_user(user_id: int, is_admin: bool = Depends(is_admin_authentica
     })
     return {"success": True}
 
+@app.delete("/api/admin/clear-all")
+async def clear_all_users(is_admin: bool = Depends(is_admin_authenticated)):
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Yetkiniz yok.")
+        
+    conn = get_db()
+    conn.execute("DELETE FROM users WHERE is_admin = 0")
+    conn.execute("DELETE FROM matches")
+    conn.commit()
+    conn.close()
+    
+    set_setting("is_drawn", "0")
+    stats = get_public_stats_data()
+    await manager.broadcast({
+        "type": "draw_reset",
+        "message": "Tüm katılımcılar silindi.",
+        "stats": stats
+    })
+    return {"success": True}
+
 @app.post("/api/admin/add-test-users")
 async def add_test_users(is_admin: bool = Depends(is_admin_authenticated)):
     """Canlı yayında veya test aşamasında anında 22 kişilik katılımcı kadrosu oluşturur."""
