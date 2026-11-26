@@ -336,9 +336,9 @@ async def update_wishlist(req: WishlistUpdateRequest, user_id: Optional[int] = D
 # --- Admin API ---
 @app.post("/api/admin/login")
 async def admin_login(req: AdminLoginRequest, response: Response):
-    # Şifreyi doğrudan güvenli ortam değişkeninden (Environment Variable) oku
+    # Şifreyi doğrudan güvenli ortam değişkeninden veya belirlenen şifreden oku
     env_pwd = os.getenv("ADMIN_PASSWORD")
-    expected_pwd = env_pwd if env_pwd else get_setting("admin_password", "admin123")
+    expected_pwd = env_pwd if env_pwd else "acunbey0641"
     
     if req.password != expected_pwd:
         raise HTTPException(status_code=401, detail="Hatalı şifre!")
