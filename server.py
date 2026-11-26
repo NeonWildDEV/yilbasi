@@ -90,21 +90,31 @@ def set_setting(key: str, value: str):
     conn.commit()
     conn.close()
 
+def read_template(filename: str) -> str:
+    # 1. templates klasöründe ara
+    p1 = os.path.join(TEMPLATES_DIR, filename)
+    if os.path.isfile(p1):
+        with open(p1, "r", encoding="utf-8") as f:
+            return f.read()
+    # 2. Ana dizinde (root) ara (GitHub'a doğrudan yüklenmişse)
+    p2 = os.path.join(BASE_DIR, filename)
+    if os.path.isfile(p2):
+        with open(p2, "r", encoding="utf-8") as f:
+            return f.read()
+    return f"<h1>Hata: {filename} dosyası bulunamadı</h1>"
+
 # --- Sayfa Yönlendirmeleri (HTML Views) ---
 @app.get("/", response_class=HTMLResponse)
 async def index_page():
-    with open(os.path.join(TEMPLATES_DIR, "index.html"), "r", encoding="utf-8") as f:
-        return f.read()
+    return read_template("index.html")
 
 @app.get("/live", response_class=HTMLResponse)
 async def live_page():
-    with open(os.path.join(TEMPLATES_DIR, "live.html"), "r", encoding="utf-8") as f:
-        return f.read()
+    return read_template("live.html")
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
-    with open(os.path.join(TEMPLATES_DIR, "admin.html"), "r", encoding="utf-8") as f:
-        return f.read()
+    return read_template("admin.html")
 
 # --- WebSocket Canlı Akış ---
 @app.websocket("/ws/live")
