@@ -112,9 +112,15 @@ async def index_page():
 async def live_page():
     return read_template("live.html")
 
-@app.get("/admin", response_class=HTMLResponse)
+# Gizli Admin Paneli Adresi: /neon
+@app.get("/neon", response_class=HTMLResponse)
 async def admin_page():
     return read_template("admin.html")
+
+# Standart /admin adresini kapatıyoruz (404 döner)
+@app.get("/admin")
+async def fake_admin_404():
+    raise HTTPException(status_code=404, detail="Sayfa bulunamadı")
 
 # --- WebSocket Canlı Akış ---
 @app.websocket("/ws/live")
@@ -330,9 +336,12 @@ async def update_wishlist(req: WishlistUpdateRequest, user_id: Optional[int] = D
 # --- Admin API ---
 @app.post("/api/admin/login")
 async def admin_login(req: AdminLoginRequest, response: Response):
-    admin_pwd = get_setting("admin_password", "admin123")
-    if req.password != admin_pwd:
-        raise HTTPException(status_code=401, detail="Admin şifresi hatalı!")
+    # Şifreyi doğrudan güvenli ortam değişkeninden (Environment Variable) oku
+    env_pwd = os.getenv("ADMIN_PASSWORD")
+    expected_pwd = env_pwd if env_pwd else get_setting("admin_password", "admin123")
+    
+    if req.password != expected_pwd:
+        raise HTTPException(status_code=401, detail="Hatalı şifre!")
         
     token = secrets.token_hex(16)
     ADMIN_SESSIONS.add(token)
