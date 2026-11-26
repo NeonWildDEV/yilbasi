@@ -267,7 +267,8 @@ async def get_my_info(user_id: Optional[int] = Depends(get_current_user_id)):
     budget_hint = get_setting("budget_hint", "250 - 500 TL")
     
     receiver_info = None
-    if is_drawn:
+    # Güvenlik önlemi: Zarf açılana kadar hedef kişi ağ üzerinden (F12 Network) asla gönderilmez!
+    if is_drawn and user["has_opened_envelope"]:
         match = conn.execute("""
             SELECT u.display_name, u.wishlist, u.avatar_icon
             FROM matches m
