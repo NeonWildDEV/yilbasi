@@ -1,13 +1,16 @@
 import sqlite3
 import os
+import time
 import hashlib
 import threading
-from typing import Optional
+from typing import Optional, Dict
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "cekilis.db")
 
 _pg_pool = None
 _pool_lock = threading.Lock()
+_conn_last_ok: Dict[int, float] = {}
+CONN_CHECK_INTERVAL = 45.0
 
 
 def get_database_url() -> Optional[str]:
@@ -39,13 +42,21 @@ def _get_pg_pool():
         from psycopg.rows import dict_row
         from psycopg_pool import ConnectionPool
 
+        def _smart_check(conn):
+            now = time.monotonic()
+            cid = id(conn)
+            if now - _conn_last_ok.get(cid, 0.0) < CONN_CHECK_INTERVAL:
+                return
+            ConnectionPool.check_connection(conn)
+            _conn_last_ok[cid] = time.monotonic()
+
         _pg_pool = ConnectionPool(
             conninfo=db_url,
-            min_size=1,
+            min_size=0,
             max_size=10,
             max_idle=240,
             timeout=20,
-            check=ConnectionPool.check_connection,
+            check=_smart_check,
             kwargs={
                 "row_factory": dict_row,
                 "prepare_threshold": None,
@@ -59,12 +70,14 @@ def _get_pg_pool():
 class PostgresCursorWrapper:
     """SQLite '?' yer tutucularını PostgreSQL '%s' formatına çeviren uyumluluk sarmalayıcısı."""
 
-    def __init__(self, raw_cursor):
+    def __init__(self, raw_conn, raw_cursor):
+        self._conn = raw_conn
         self._cur = raw_cursor
 
     def execute(self, sql: str, params: tuple = ()):
         pg_sql = sql.replace("?", "%s")
         self._cur.execute(pg_sql, params)
+        _conn_last_ok[id(self._conn)] = time.monotonic()
         return self
 
     def fetchone(self):
@@ -89,6 +102,7 @@ class PostgresConnectionWrapper:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
+            _conn_last_ok.pop(id(self._conn), None)
             try:
                 self._conn.rollback()
             except Exception:
@@ -97,7 +111,7 @@ class PostgresConnectionWrapper:
         return False
 
     def cursor(self):
-        return PostgresCursorWrapper(self._conn.cursor())
+        return PostgresCursorWrapper(self._conn, self._conn.cursor())
 
     def execute(self, sql: str, params: tuple = ()):
         cur = self.cursor()
@@ -105,6 +119,7 @@ class PostgresConnectionWrapper:
 
     def commit(self):
         self._conn.commit()
+        _conn_last_ok[id(self._conn)] = time.monotonic()
 
     def rollback(self):
         self._conn.rollback()
@@ -164,7 +179,7 @@ def get_db():
 
 
 def hash_password(password: str) -> str:
-    """Parolayı SHA-256 ve salt ile özetler."""
+    """Parolayı SHA-256 ve salt ile özetler (mevcut şifre uyumluluğu için salt sabit tutulur)."""
     salt = "yilbasi_cekilisi_2026_super_secret"
     return hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
 
@@ -175,7 +190,6 @@ def init_db():
         pg = is_postgres()
         id_col = "SERIAL PRIMARY KEY" if pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-        # Kullanıcılar Tablosu
         cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS users (
             id {id_col},
@@ -190,7 +204,6 @@ def init_db():
         );
         """)
 
-        # Çekiliş Durumu Tablosu
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
@@ -198,7 +211,6 @@ def init_db():
         );
         """)
 
-        # Eşleşmeler Tablosu (Gizli Kura Sonuçları)
         cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS matches (
             id {id_col},
@@ -208,7 +220,6 @@ def init_db():
         );
         """)
 
-        # Kalıcı Oturumlar Tablosu (Sunucu yeniden başlasa bile oturumlar düşmez)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
@@ -218,7 +229,6 @@ def init_db():
         );
         """)
 
-        # Canlı Akış Bildirimleri Tablosu
         cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS live_feed (
             id {id_col},
@@ -228,10 +238,9 @@ def init_db():
         );
         """)
 
-        # Varsayılan ayarları yükle
         default_settings = [
             ("is_drawn", "0"),
-            ("draw_title", "2026 Yılbaşı Gizli Hediye Çekilişi 🎁"),
+            ("draw_title", "2027 Yılbaşı Gizli Hediye Çekilişi 🎁"),
             ("budget_hint", "Önerilen Hediye Bütçesi: 250 - 500 TL"),
             ("admin_password", "admin123"),
         ]
@@ -240,6 +249,12 @@ def init_db():
                 "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING",
                 (k, v),
             )
+
+        # Eski varsayılan 2026 başlığını 2027'ye güncelle
+        cursor.execute(
+            "UPDATE settings SET value = ? WHERE key = 'draw_title' AND value LIKE '%2026%'",
+            ("2027 Yılbaşı Gizli Hediye Çekilişi 🎁",),
+        )
 
         conn.commit()
 

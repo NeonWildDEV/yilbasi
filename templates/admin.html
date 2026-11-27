@@ -105,9 +105,14 @@
                     <h3 class="text-base font-bold text-white flex items-center gap-2">
                         <span>📋</span> Kayıtlı Katılımcılar (<span id="userListCount">0</span>)
                     </h3>
-                    <button id="clearAllUsersBtn2" class="px-3.5 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/50 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow">
-                        <span>🗑️</span> Veritabanını Sıfırla (Tüm Katılımcıları Sil)
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="clearChatBtn" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow">
+                            <span>🧹</span> Canlı Sohbeti Temizle
+                        </button>
+                        <button id="clearAllUsersBtn2" class="px-3.5 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/50 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow">
+                            <span>🗑️</span> Veritabanını Sıfırla (Tüm Katılımcıları Sil)
+                        </button>
+                    </div>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -303,6 +308,16 @@
                     alert("Sıfırlama işlemi başarısız oldu.");
                 }
             }
+        }
+
+        const clearChatBtn = document.getElementById("clearChatBtn");
+        if (clearChatBtn) {
+            clearChatBtn.addEventListener("click", async () => {
+                if (confirm("Canlı yayın ekranındaki tüm sohbet mesajları temizlensin mi?")) {
+                    const res = await fetch("/api/admin/chat", { method: "DELETE" });
+                    if (res.ok) alert("Canlı sohbet temizlendi!");
+                }
+            });
         }
 
         const btn1 = document.getElementById("clearAllUsersBtn");

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canlı Yayın Ekranı - 2026 Yılbaşı Çekilişi 🎁</title>
+    <title>Canlı Yayın Ekranı - 2027 Yılbaşı Çekilişi 🎁</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
@@ -58,12 +58,12 @@
         .gold-glow {
             text-shadow: 0 0 20px rgba(250, 204, 21, 0.6), 0 0 40px rgba(239, 68, 68, 0.4);
         }
-        
+
         .card-pop {
-            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         @keyframes popIn {
-            0% { transform: scale(0.7); opacity: 0; }
+            0% { transform: scale(0.85); opacity: 0; }
             100% { transform: scale(1); opacity: 1; }
         }
 
@@ -74,6 +74,20 @@
             0%, 100% { transform: rotate(0deg) scale(1); }
             25% { transform: rotate(-8deg) scale(1.05); }
             75% { transform: rotate(8deg) scale(1.05); }
+        }
+
+        /* Sohbet Kaydırma Çubuğu */
+        .chat-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+            overscroll-behavior: contain;
+        }
+        .chat-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 9999px;
         }
 
         /* Uçan Noel Baba Animasyonu */
@@ -107,7 +121,7 @@
         }
     </style>
 </head>
-<body class="relative flex flex-col justify-between p-6">
+<body class="relative flex flex-col justify-between p-4 md:p-6">
     <canvas id="snowCanvas" class="snow-canvas"></canvas>
 
     <!-- Üst Yılbaşı Işıkları -->
@@ -143,19 +157,19 @@
     </div>
 
     <!-- Canlı Yayın Başlık Bölümü -->
-    <header class="w-full text-center py-4 z-10">
+    <header class="w-full text-center py-3 z-10">
         <div class="inline-flex items-center gap-2 bg-red-600/20 border border-red-500/40 px-4 py-1.5 rounded-full text-xs font-bold text-red-400 mb-3 shadow-lg">
             <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span> CANLI YAYIN
         </div>
         <h1 class="text-3xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-amber-200 to-emerald-400 gold-glow">
-            🎄 inavitas 2026 YILBAŞI GİZLİ HEDİYE ÇEKİLİŞİ 🎁
+            🎄 2027 YILBAŞI GİZLİ HEDİYE ÇEKİLİŞİ 🎁
         </h1>
         <p class="text-sm md:text-base text-gray-300 mt-2 font-medium">
             Herkes 1 kişiye hediye alacak • Sürpriz ve gizli eşleşme!
         </p>
 
         <!-- Canlı İstatistik Göstergeleri -->
-        <div class="flex flex-wrap justify-center gap-4 mt-5">
+        <div class="flex flex-wrap justify-center gap-4 mt-4">
             <div class="bg-slate-900/80 border border-amber-500/40 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
                 <span class="text-2xl">👥</span>
                 <div class="text-left">
@@ -163,8 +177,6 @@
                     <div class="text-xl font-extrabold text-amber-300" id="totalCount">0 Kişi</div>
                 </div>
             </div>
-
-
 
             <div class="bg-slate-900/80 border border-blue-500/40 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
                 <span class="text-2xl">✉️</span>
@@ -176,10 +188,12 @@
         </div>
     </header>
 
-    <!-- Katılımcılar Canlı Tablosu -->
-    <main class="w-full max-w-6xl mx-auto my-6 z-10 flex-1">
-        <div class="bg-slate-900/60 backdrop-blur-lg border border-slate-800 rounded-3xl p-6 shadow-2xl">
-            <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+    <!-- Ana İçerik: Sol Katılımcılar + Sağ Canlı Sohbet -->
+    <main class="w-full max-w-7xl mx-auto my-4 z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+        <!-- Sol: Katılımcılar Canlı Tablosu -->
+        <section class="lg:col-span-8 bg-slate-900/60 backdrop-blur-lg border border-slate-800 rounded-3xl p-5 md:p-6 shadow-2xl">
+            <div class="flex flex-wrap justify-between items-center mb-5 pb-3 border-b border-slate-800 gap-2">
                 <div class="flex items-center gap-2">
                     <span class="text-xl">🎅</span>
                     <h2 class="text-lg font-bold text-white">Canlı Katılımcı Listesi</h2>
@@ -190,18 +204,75 @@
             </div>
 
             <!-- Katılımcı Kartları Grid -->
-            <div id="participantsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+            <div id="participantsGrid" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
                 <!-- JS ile dolacak -->
             </div>
 
             <div id="emptyListState" class="text-center py-12 text-gray-500 text-sm hidden">
                 Henüz katılımcı kaydolmadı. Kayıt ekranından kayıtlar bekleniyor...
             </div>
-        </div>
+        </section>
+
+        <!-- Sağ: Canlı Yayın Sohbeti -->
+        <aside class="lg:col-span-4 bg-slate-900/70 backdrop-blur-lg border border-slate-800 rounded-3xl p-4 md:p-5 shadow-2xl flex flex-col h-[460px] lg:h-[540px]">
+            <div class="flex justify-between items-center pb-3 mb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">💬</span>
+                    <h2 class="text-base font-bold text-white">Canlı Sohbet</h2>
+                </div>
+                <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="onlineCountBadge">1 Canlı</span>
+                </span>
+            </div>
+
+            <!-- Mesaj Akışı -->
+            <div class="relative flex-1 min-h-0">
+                <div id="chatMessages" role="log" aria-live="polite" class="chat-scroll h-full overflow-y-auto space-y-2 pr-1"></div>
+                <div id="chatEmptyState" class="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-500 text-xs px-4 pointer-events-none">
+                    <span class="text-3xl mb-2">🎄</span>
+                    <span>Henüz mesaj yok.<br>İlk yeni yıl mesajını sen yaz!</span>
+                </div>
+            </div>
+
+            <!-- Hızlı Emojiler + Mesaj Gönderme Alanı -->
+            <div class="pt-3 mt-2 border-t border-slate-800 space-y-2">
+                <div class="flex items-center justify-between gap-1">
+                    <div class="flex gap-1">
+                        <button type="button" class="quick-emoji-btn text-sm px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" data-emoji="🎄">🎄</button>
+                        <button type="button" class="quick-emoji-btn text-sm px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" data-emoji="🎁">🎁</button>
+                        <button type="button" class="quick-emoji-btn text-sm px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" data-emoji="🎉">🎉</button>
+                        <button type="button" class="quick-emoji-btn text-sm px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" data-emoji="🔥">🔥</button>
+                        <button type="button" class="quick-emoji-btn text-sm px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" data-emoji="😂">😂</button>
+                        <button type="button" class="quick-emoji-btn text-sm px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" data-emoji="❤️">❤️</button>
+                    </div>
+                    <div id="chatLoggedIdentity" class="hidden text-[11px] text-amber-300 font-semibold truncate max-w-[150px]" title="Giriş yapılmış katılımcı">
+                        <span id="chatLoggedName"></span>
+                    </div>
+                </div>
+
+                <!-- Giriş yapmamış izleyiciler için rumuz alanı -->
+                <div id="chatGuestBox">
+                    <input type="text" id="chatGuestName" maxlength="30" placeholder="Adın / Rumuzun..."
+                           class="w-full px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-amber-400">
+                </div>
+
+                <form id="chatForm" class="flex gap-2">
+                    <input type="text" id="chatInput" maxlength="200" autocomplete="off" placeholder="Mesaj yaz..."
+                           class="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-amber-400">
+                    <button type="submit" id="chatSendBtn"
+                            class="px-3.5 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold rounded-xl shadow transition shrink-0">
+                        Gönder
+                    </button>
+                </form>
+                <div id="chatError" class="hidden text-[11px] text-red-400 font-medium"></div>
+            </div>
+        </aside>
+
     </main>
 
-    <!-- Canlı Bildirim / Toast Akışı -->
-    <div id="liveToast" class="fixed bottom-6 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-900/95 border border-yellow-400/80 shadow-2xl rounded-2xl px-5 py-3.5 flex items-center gap-3">
+    <!-- Canlı Bildirim / Toast Akışı (Sağ Üstte - Sohbet kutusunu kapatmaz) -->
+    <div id="liveToast" class="fixed top-6 right-6 z-50 transform -translate-y-24 opacity-0 transition-all duration-300 bg-slate-900/95 border border-yellow-400/80 shadow-2xl rounded-2xl px-5 py-3.5 flex items-center gap-3 pointer-events-none">
         <span class="text-2xl" id="toastIcon">🎁</span>
         <div>
             <div class="text-xs font-bold text-yellow-400" id="toastTitle">Yeni Katılımcı!</div>
@@ -289,24 +360,21 @@
             if (!santa) return;
 
             function triggerFlight() {
-                // Rastgele yükseklik (ekranın %10'u ile %32'si arası)
                 const randomTop = Math.floor(Math.random() * 22) + 10;
                 santa.style.top = `${randomTop}%`;
-                
+
                 santa.classList.remove("flying-santa-active");
-                void santa.offsetWidth; // Reflow tetikle
+                void santa.offsetWidth;
                 santa.classList.add("flying-santa-active");
 
-                // Uçuş 11 sn sürüyor; bittikten sonra 18 ile 35 saniye sonra tekrar uç
                 const nextInterval = (Math.floor(Math.random() * 17) + 18) * 1000;
                 setTimeout(triggerFlight, nextInterval + 11000);
             }
 
-            // Sayfa yüklendikten 3 saniye sonra ilk geçişi başlat
             setTimeout(triggerFlight, 3000);
         }
         startFlyingSantaLoop();
     </script>
-    <script src="/static/js/live.js"></script>
+    <script src="/static/js/live.js?v=3"></script>
 </body>
 </html>

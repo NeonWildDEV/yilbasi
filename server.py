@@ -2,8 +2,10 @@ import os
 import time
 import secrets
 import asyncio
+from collections import deque
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response, HTTPException, Depends, Cookie
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, HTTPException, Cookie
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -13,7 +15,7 @@ from secret_santa import generate_secret_santa_matches
 
 init_db()
 
-app = FastAPI(title="Yılbaşı Çekiliş Sistemi")
+app = FastAPI(title="2027 Yılbaşı Çekiliş Sistemi")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -28,13 +30,20 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Veritabanı destekli (kalıcı) + bellek önbellekli (0ms okuma) oturum ve istatistik katmanı
 SESSION_CACHE: Dict[str, int] = {}
+USER_META_CACHE: Dict[int, Dict[str, str]] = {}  # user_id -> {display_name, avatar_icon}
 ADMIN_SESSION_CACHE: set = set()
 _stats_cache: Optional[dict] = None
 _stats_cache_ts: float = 0.0
 STATS_CACHE_TTL = 10.0
 
+# Canlı Sohbet: Veritabanına sıfır yük bindiren bellek içi halka tampon (son 60 mesaj)
+CHAT_HISTORY: deque = deque(maxlen=60)
+_chat_seq: int = 0
+_chat_rate_limit: Dict[str, float] = {}
+TR_TZ = timezone(timedelta(hours=3))
 
-# WebSocket Bağlantı Yöneticisi (Canlı Yayın Ekranı ve Katılımcılar İçin)
+
+# WebSocket Bağlantı Yöneticisi (Paralel ve zaman aşımı korumalı yayın)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -47,12 +56,17 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
+    async def _send_safe(self, connection: WebSocket, message: dict):
+        try:
+            await asyncio.wait_for(connection.send_json(message), timeout=2.5)
+        except Exception:
+            self.disconnect(connection)
+
     async def broadcast(self, message: dict):
-        for connection in list(self.active_connections):
-            try:
-                await connection.send_json(message)
-            except Exception:
-                self.disconnect(connection)
+        conns = list(self.active_connections)
+        if not conns:
+            return
+        await asyncio.gather(*(self._send_safe(c, message) for c in conns), return_exceptions=True)
 
 
 manager = ConnectionManager()
@@ -78,6 +92,12 @@ class AdminLoginRequest(BaseModel):
 
 class WishlistUpdateRequest(BaseModel):
     wishlist: str
+
+
+class ChatMessageRequest(BaseModel):
+    text: str
+    sender_name: Optional[str] = ""
+    avatar_icon: Optional[str] = "🎄"
 
 
 # --- Yardımcı Fonksiyonlar ---
@@ -131,6 +151,26 @@ def resolve_user_id(session_token: Optional[str], conn=None) -> Optional[int]:
     return None
 
 
+def resolve_user_meta(session_token: Optional[str]) -> Optional[Dict[str, str]]:
+    """Sohbet için giriş yapmış kullanıcının ad ve avatarını 0ms bellekten (gerekirse tek sorguyla) çözer."""
+    if not session_token:
+        return None
+    uid = SESSION_CACHE.get(session_token)
+    if uid is not None and uid in USER_META_CACHE:
+        return USER_META_CACHE[uid]
+
+    with get_db() as conn:
+        uid = resolve_user_id(session_token, conn=conn)
+        if not uid:
+            return None
+        row = conn.execute("SELECT display_name, avatar_icon FROM users WHERE id = ?", (uid,)).fetchone()
+        if not row:
+            return None
+        meta = {"display_name": row["display_name"], "avatar_icon": row["avatar_icon"] or "🎅"}
+        USER_META_CACHE[uid] = meta
+        return meta
+
+
 def resolve_admin(admin_token: Optional[str], conn=None) -> bool:
     if not admin_token:
         return False
@@ -153,10 +193,6 @@ def resolve_admin(admin_token: Optional[str], conn=None) -> bool:
         ADMIN_SESSION_CACHE.add(admin_token)
         return True
     return False
-
-
-def is_admin_authenticated(admin_token: Optional[str] = Cookie(None)) -> bool:
-    return resolve_admin(admin_token)
 
 
 def read_template(filename: str) -> str:
@@ -192,12 +228,18 @@ async def fake_admin_404():
     raise HTTPException(status_code=404, detail="Sayfa bulunamadı")
 
 
+# Sıfır veritabanı yüklü Keep-Alive uç noktası (Render'ın yayın sırasında uyumasını engeller)
+@app.get("/api/ping")
+async def ping():
+    return {"ok": True, "online": len(manager.active_connections)}
+
+
 # --- İstatistik & Canlı Bilgi Fonksiyonu ---
 def _compute_public_stats_on_conn(conn) -> dict:
     global _stats_cache, _stats_cache_ts
     settings = fetch_settings_map(conn)
     is_drawn = settings.get("is_drawn", "0") == "1"
-    draw_title = settings.get("draw_title", "2026 Yılbaşı Gizli Hediye Çekilişi 🎁")
+    draw_title = settings.get("draw_title", "2027 Yılbaşı Gizli Hediye Çekilişi 🎁")
     budget_hint = settings.get("budget_hint", "250 - 500 TL")
 
     users = conn.execute("""
@@ -207,15 +249,18 @@ def _compute_public_stats_on_conn(conn) -> dict:
         ORDER BY id ASC
     """).fetchall()
 
-    participants = [
-        {
+    participants = []
+    for u in users:
+        USER_META_CACHE[u["id"]] = {
+            "display_name": u["display_name"],
+            "avatar_icon": u["avatar_icon"] or "🎅",
+        }
+        participants.append({
             "id": u["id"],
             "display_name": u["display_name"],
             "avatar_icon": u["avatar_icon"],
             "has_opened_envelope": bool(u["has_opened_envelope"]),
-        }
-        for u in users
-    ]
+        })
 
     opened_count = sum(1 for p in participants if p["has_opened_envelope"])
     result = {
@@ -248,18 +293,99 @@ async def websocket_live_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         stats = await asyncio.to_thread(get_public_stats_cached)
-        await websocket.send_json({"type": "init_state", "data": stats})
+        await websocket.send_json({
+            "type": "init_state",
+            "data": stats,
+            "chat": list(CHAT_HISTORY),
+            "online_count": len(manager.active_connections),
+        })
+        await manager.broadcast({
+            "type": "presence",
+            "online_count": len(manager.active_connections),
+        })
         while True:
-            await websocket.receive_text()
+            msg = await websocket.receive_text()
+            if msg == "ping":
+                await websocket.send_json({"type": "pong", "online_count": len(manager.active_connections)})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        await manager.broadcast({"type": "presence", "online_count": len(manager.active_connections)})
     except Exception:
         manager.disconnect(websocket)
+        await manager.broadcast({"type": "presence", "online_count": len(manager.active_connections)})
 
 
 @app.get("/api/public-stats")
 def public_stats():
     return get_public_stats_cached()
+
+
+# --- Canlı Sohbet API (Sıfır DB Yükü - Tamamen Bellek İçi & WebSocket) ---
+@app.post("/api/chat")
+async def post_chat_message(
+    req: ChatMessageRequest,
+    request: Request,
+    session_token: Optional[str] = Cookie(None),
+):
+    global _chat_seq
+    text = (req.text or "").replace("\r", " ").replace("\n", " ").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Boş mesaj gönderilemez.")
+    if len(text) > 200:
+        text = text[:200]
+
+    # Spam koruması (kullanıcı veya IP başına 0.8 saniye)
+    rate_key = session_token or (request.client.host if request.client else "anon")
+    now = time.monotonic()
+    if now - _chat_rate_limit.get(rate_key, 0.0) < 0.8:
+        raise HTTPException(status_code=429, detail="Çok hızlı mesaj gönderiyorsunuz, lütfen 1 saniye bekleyin.")
+    _chat_rate_limit[rate_key] = now
+    if len(_chat_rate_limit) > 500:
+        _chat_rate_limit.clear()
+
+    # Giriş yapmış katılımcıysa gerçek ismini ve avatarını kullan
+    meta = None
+    if session_token:
+        meta = await asyncio.to_thread(resolve_user_meta, session_token)
+
+    if meta:
+        sender = meta["display_name"]
+        avatar = meta["avatar_icon"]
+        verified = True
+    else:
+        sender = (req.sender_name or "").strip()[:30]
+        if len(sender) < 2:
+            raise HTTPException(status_code=400, detail="Lütfen sohbet için en az 2 karakterli bir isim girin.")
+        allowed_avatars = {"🎅", "🦌", "🎄", "⛄", "🎁", "⭐", "🧦", "✨"}
+        avatar = req.avatar_icon if req.avatar_icon in allowed_avatars else "🎄"
+        verified = False
+
+    _chat_seq += 1
+    msg_obj = {
+        "id": _chat_seq,
+        "sender": sender,
+        "avatar": avatar,
+        "text": text,
+        "time": datetime.now(TR_TZ).strftime("%H:%M"),
+        "verified": verified,
+    }
+    CHAT_HISTORY.append(msg_obj)
+
+    await manager.broadcast({
+        "type": "chat_message",
+        "message": msg_obj,
+    })
+    return {"success": True, "message": msg_obj}
+
+
+@app.delete("/api/admin/chat")
+async def clear_chat(admin_token: Optional[str] = Cookie(None)):
+    is_adm = await asyncio.to_thread(resolve_admin, admin_token)
+    if not is_adm:
+        raise HTTPException(status_code=403, detail="Yetkiniz yok.")
+    CHAT_HISTORY.clear()
+    await manager.broadcast({"type": "chat_cleared"})
+    return {"success": True}
 
 
 # --- Kullanıcı Kayıt & Giriş API ---
@@ -290,6 +416,7 @@ async def register(req: RegisterRequest, response: Response):
             """, (username, pwd_hash, display_name, wishlist_val, avatar))
             created_row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
             user_id = created_row["id"]
+            USER_META_CACHE[user_id] = {"display_name": display_name, "avatar_icon": avatar}
             token = create_session_on_conn(conn, user_id=user_id, is_admin=False)
             conn.commit()
             stats = _compute_public_stats_on_conn(conn)
@@ -317,11 +444,15 @@ def login(req: LoginRequest, response: Response):
 
     with get_db() as conn:
         user = conn.execute(
-            "SELECT id, display_name FROM users WHERE username = ? AND password_hash = ?",
+            "SELECT id, display_name, avatar_icon FROM users WHERE username = ? AND password_hash = ?",
             (username, pwd_hash),
         ).fetchone()
         if not user:
             raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı!")
+        USER_META_CACHE[user["id"]] = {
+            "display_name": user["display_name"],
+            "avatar_icon": user["avatar_icon"] or "🎅",
+        }
         token = create_session_on_conn(conn, user_id=user["id"], is_admin=False)
         conn.commit()
         display_name = user["display_name"]
@@ -359,13 +490,17 @@ def get_my_info(session_token: Optional[str] = Cookie(None)):
             SESSION_CACHE.pop(session_token, None)
             return {"authenticated": False}
 
+        USER_META_CACHE[user["id"]] = {
+            "display_name": user["display_name"],
+            "avatar_icon": user["avatar_icon"] or "🎅",
+        }
+
         settings = fetch_settings_map(conn)
         is_drawn = settings.get("is_drawn", "0") == "1"
-        draw_title = settings.get("draw_title", "2026 Yılbaşı Gizli Hediye Çekilişi 🎁")
+        draw_title = settings.get("draw_title", "2027 Yılbaşı Gizli Hediye Çekilişi 🎁")
         budget_hint = settings.get("budget_hint", "250 - 500 TL")
 
         receiver_info = None
-        # Güvenlik önlemi: Zarf açılana kadar hedef kişi ağ üzerinden (F12 Network) asla gönderilmez!
         if is_drawn and user["has_opened_envelope"]:
             match = conn.execute("""
                 SELECT u.display_name, u.wishlist, u.avatar_icon
@@ -494,7 +629,7 @@ def admin_overview(admin_token: Optional[str] = Cookie(None)):
 
         settings = fetch_settings_map(conn)
         is_drawn = settings.get("is_drawn", "0") == "1"
-        draw_title = settings.get("draw_title", "2026 Yılbaşı Gizli Hediye Çekilişi 🎁")
+        draw_title = settings.get("draw_title", "2027 Yılbaşı Gizli Hediye Çekilişi 🎁")
         budget_hint = settings.get("budget_hint", "250 - 500 TL")
 
         matches = []
@@ -597,6 +732,7 @@ async def delete_user(user_id: int, admin_token: Optional[str] = Cookie(None)):
                 raise HTTPException(status_code=403, detail="Yetkiniz yok.")
             conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
             conn.commit()
+            USER_META_CACHE.pop(user_id, None)
             for tok in [t for t, uid in SESSION_CACHE.items() if uid == user_id]:
                 SESSION_CACHE.pop(tok, None)
             return _compute_public_stats_on_conn(conn)
@@ -620,6 +756,7 @@ async def clear_all_users(admin_token: Optional[str] = Cookie(None)):
             set_setting_on_conn(conn, "is_drawn", "0")
             conn.commit()
             SESSION_CACHE.clear()
+            USER_META_CACHE.clear()
             return _compute_public_stats_on_conn(conn)
 
     stats = await asyncio.to_thread(_do_clear)

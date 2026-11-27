@@ -285,18 +285,32 @@ function setupWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws/live`;
     let ws = null;
+    let pingTimer = null;
+
+    setInterval(() => {
+        fetch("/api/ping").catch(() => {});
+    }, 4 * 60 * 1000);
 
     function connect() {
         ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+            if (pingTimer) clearInterval(pingTimer);
+            pingTimer = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send("ping");
+                }
+            }, 25000);
+        };
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === "draw_completed" || msg.type === "draw_reset") {
-                    checkAuth();
+                    setTimeout(() => checkAuth(), Math.floor(Math.random() * 500));
                 }
             } catch (e) {}
         };
         ws.onclose = () => {
+            if (pingTimer) clearInterval(pingTimer);
             setTimeout(connect, 3000);
         };
     }

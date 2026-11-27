@@ -1,20 +1,36 @@
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveWebSocket();
     setupOverlay();
+    setupLiveChat();
+    setupKeepAlive();
 });
 
 let currentStats = null;
+let chatIdentity = { authenticated: false, displayName: "", avatar: "🎄" };
+
+function setupKeepAlive() {
+    // Ekran açık olduğu sürece Render'ın 15 dk uyku moduna girmesini engeller (DB sorgusu yapmaz)
+    setInterval(() => {
+        fetch("/api/ping").catch(() => {});
+    }, 4 * 60 * 1000);
+}
 
 function setupLiveWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws/live`;
     let ws = null;
+    let pingTimer = null;
 
     function connect() {
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-            console.log("Canlı WebSocket yayınına bağlanıldı.");
+            if (pingTimer) clearInterval(pingTimer);
+            pingTimer = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send("ping");
+                }
+            }, 25000);
         };
 
         ws.onmessage = (event) => {
@@ -27,8 +43,8 @@ function setupLiveWebSocket() {
         };
 
         ws.onclose = () => {
-            console.log("Bağlantı koptu, 2 sn sonra tekrar bağlanılıyor...");
-            setTimeout(connect, 2000);
+            if (pingTimer) clearInterval(pingTimer);
+            setTimeout(connect, 2500);
         };
     }
 
@@ -39,6 +55,21 @@ function handleLiveEvent(payload) {
     switch (payload.type) {
         case "init_state":
             renderStats(payload.data);
+            renderChatHistory(payload.chat || []);
+            updateOnlineCount(payload.online_count);
+            break;
+
+        case "presence":
+        case "pong":
+            updateOnlineCount(payload.online_count);
+            break;
+
+        case "chat_message":
+            appendChatMessage(payload.message);
+            break;
+
+        case "chat_cleared":
+            renderChatHistory([]);
             break;
 
         case "user_registered":
@@ -48,7 +79,7 @@ function handleLiveEvent(payload) {
             break;
 
         case "users_batch_added":
-            showToast("Toplu Katılım!", `Yeni katılımcılar listeye eklendi!`, "🎁");
+            showToast("Toplu Katılım!", "Yeni katılımcılar listeye eklendi!", "🎁");
             renderStats(payload.stats);
             break;
 
@@ -74,6 +105,190 @@ function handleLiveEvent(payload) {
             showToast("Kura Sıfırlandı", "Admin tarafından kuralar sıfırlandı.", "🔄");
             renderStats(payload.stats);
             break;
+    }
+}
+
+function updateOnlineCount(count) {
+    const el = document.getElementById("onlineCountBadge");
+    if (el && typeof count === "number") {
+        el.textContent = `${count} Canlı`;
+    }
+}
+
+async function setupLiveChat() {
+    const guestBox = document.getElementById("chatGuestBox");
+    const loggedBox = document.getElementById("chatLoggedIdentity");
+    const loggedNameEl = document.getElementById("chatLoggedName");
+    const guestInput = document.getElementById("chatGuestName");
+    const chatForm = document.getElementById("chatForm");
+    const chatInput = document.getElementById("chatInput");
+    const chatSendBtn = document.getElementById("chatSendBtn");
+    const chatError = document.getElementById("chatError");
+
+    // Kayıtlı misafir adını yükle
+    const savedGuest = localStorage.getItem("yilbasi_chat_guest") || "";
+    const savedAvatar = localStorage.getItem("yilbasi_chat_avatar") || "🎄";
+    if (guestInput && savedGuest) {
+        guestInput.value = savedGuest;
+    }
+    chatIdentity.avatar = savedAvatar;
+
+    // Kullanıcı zaten giriş yapmış mı kontrol et
+    try {
+        const res = await fetch("/api/me");
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+            chatIdentity = {
+                authenticated: true,
+                displayName: data.user.display_name,
+                avatar: data.user.avatar_icon || "🎅",
+            };
+            if (guestBox) guestBox.classList.add("hidden");
+            if (loggedBox && loggedNameEl) {
+                loggedNameEl.textContent = `${chatIdentity.avatar} ${chatIdentity.displayName}`;
+                loggedBox.classList.remove("hidden");
+            }
+        }
+    } catch (e) {}
+
+    // Hızlı emoji butonları
+    document.querySelectorAll(".quick-emoji-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            if (!chatInput) return;
+            chatInput.value = (chatInput.value + btn.getAttribute("data-emoji")).slice(0, 200);
+            chatInput.focus();
+        });
+    });
+
+    if (!chatForm) return;
+
+    let sending = false;
+    chatForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (sending || !chatInput) return;
+
+        const text = chatInput.value.trim();
+        if (!text) return;
+
+        let senderName = chatIdentity.displayName;
+        if (!chatIdentity.authenticated && guestInput) {
+            senderName = guestInput.value.trim();
+            if (senderName.length < 2) {
+                showChatError("Lütfen önce en az 2 harfli adınızı yazın.");
+                guestInput.focus();
+                return;
+            }
+            localStorage.setItem("yilbasi_chat_guest", senderName);
+        }
+
+        sending = true;
+        if (chatSendBtn) chatSendBtn.disabled = true;
+        if (chatError) chatError.classList.add("hidden");
+
+        try {
+            const res = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text,
+                    sender_name: senderName,
+                    avatar_icon: chatIdentity.avatar,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showChatError(data.detail || "Mesaj gönderilemedi.");
+            } else {
+                chatInput.value = "";
+            }
+        } catch (err) {
+            showChatError("Bağlantı hatası, tekrar deneyin.");
+        } finally {
+            sending = false;
+            if (chatSendBtn) chatSendBtn.disabled = false;
+            chatInput.focus();
+        }
+    });
+}
+
+function showChatError(msg) {
+    const el = document.getElementById("chatError");
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove("hidden");
+    setTimeout(() => el.classList.add("hidden"), 3500);
+}
+
+function renderChatHistory(messages) {
+    const box = document.getElementById("chatMessages");
+    const emptyEl = document.getElementById("chatEmptyState");
+    if (!box) return;
+
+    box.innerHTML = "";
+    if (!messages || messages.length === 0) {
+        if (emptyEl) emptyEl.classList.remove("hidden");
+        return;
+    }
+    if (emptyEl) emptyEl.classList.add("hidden");
+
+    messages.forEach((m) => appendChatMessage(m, false));
+    box.scrollTop = box.scrollHeight;
+}
+
+function appendChatMessage(m, autoScroll = true) {
+    if (!m) return;
+    const box = document.getElementById("chatMessages");
+    const emptyEl = document.getElementById("chatEmptyState");
+    if (!box) return;
+    if (emptyEl) emptyEl.classList.add("hidden");
+
+    // Tekrarlı mesaj kontrolü
+    if (m.id && box.querySelector(`[data-msg-id="${m.id}"]`)) return;
+
+    const item = document.createElement("div");
+    item.className = "bg-slate-800/75 border border-slate-700/60 rounded-2xl px-3 py-2 text-xs card-pop";
+    if (m.id) item.setAttribute("data-msg-id", String(m.id));
+
+    const header = document.createElement("div");
+    header.className = "flex items-center justify-between gap-2 mb-0.5";
+
+    const left = document.createElement("div");
+    left.className = "flex items-center gap-1.5 min-w-0";
+
+    const avatarSpan = document.createElement("span");
+    avatarSpan.className = "text-sm shrink-0";
+    avatarSpan.textContent = m.avatar || "🎄";
+
+    const senderSpan = document.createElement("span");
+    senderSpan.className = m.verified
+        ? "font-bold text-amber-300 truncate"
+        : "font-semibold text-blue-300 truncate";
+    senderSpan.textContent = m.sender || "Katılımcı";
+
+    left.appendChild(avatarSpan);
+    left.appendChild(senderSpan);
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "text-[10px] text-gray-500 shrink-0";
+    timeSpan.textContent = m.time || "";
+
+    header.appendChild(left);
+    header.appendChild(timeSpan);
+
+    const body = document.createElement("p");
+    body.className = "text-gray-100 break-words leading-relaxed";
+    body.textContent = m.text || "";
+
+    item.appendChild(header);
+    item.appendChild(body);
+    box.appendChild(item);
+
+    while (box.children.length > 60) {
+        box.removeChild(box.firstChild);
+    }
+
+    if (autoScroll) {
+        box.scrollTop = box.scrollHeight;
     }
 }
 
@@ -107,7 +322,7 @@ function renderStats(stats) {
     emptyState.classList.add("hidden");
     grid.innerHTML = "";
 
-    stats.participants.forEach((p, index) => {
+    stats.participants.forEach((p) => {
         const card = document.createElement("div");
         card.className = "bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-2xl p-3 flex items-center gap-3 shadow-md card-pop transition";
 
@@ -118,8 +333,8 @@ function renderStats(stats) {
             : `<span class="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800">Hazır 🎄</span>`;
 
         card.innerHTML = `
-            <div class="text-3xl bg-slate-900/90 w-11 h-11 rounded-xl flex items-center justify-center border border-slate-700">
-                ${p.avatar_icon || "🎅"}
+            <div class="text-3xl bg-slate-900/90 w-11 h-11 rounded-xl flex items-center justify-center border border-slate-700 shrink-0">
+                ${escapeHtml(p.avatar_icon || "🎅")}
             </div>
             <div class="overflow-hidden flex-1">
                 <div class="text-xs font-bold text-white truncate">${escapeHtml(p.display_name)}</div>
@@ -136,12 +351,12 @@ function showToast(title, msg, icon = "🎁") {
     document.getElementById("toastMsg").textContent = msg;
     document.getElementById("toastIcon").textContent = icon;
 
-    toast.classList.remove("translate-y-24", "opacity-0");
+    toast.classList.remove("-translate-y-24", "opacity-0");
     toast.classList.add("translate-y-0", "opacity-100");
 
     setTimeout(() => {
         toast.classList.remove("translate-y-0", "opacity-100");
-        toast.classList.add("translate-y-24", "opacity-0");
+        toast.classList.add("-translate-y-24", "opacity-0");
     }, 4000);
 }
 
@@ -265,5 +480,5 @@ function playCelebrationFanfare() {
 
 function escapeHtml(str) {
     if (!str) return "";
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
