@@ -75,8 +75,11 @@ class PostgresCursorWrapper:
         self._cur = raw_cursor
 
     def execute(self, sql: str, params: tuple = ()):
-        pg_sql = sql.replace("?", "%s")
-        self._cur.execute(pg_sql, params)
+        if params:
+            pg_sql = sql.replace("%", "%%").replace("?", "%s")
+            self._cur.execute(pg_sql, params)
+        else:
+            self._cur.execute(sql)
         _conn_last_ok[id(self._conn)] = time.monotonic()
         return self
 
@@ -252,8 +255,8 @@ def init_db():
 
         # Eski varsayılan 2026 başlığını 2027'ye güncelle
         cursor.execute(
-            "UPDATE settings SET value = ? WHERE key = 'draw_title' AND value LIKE '%2026%'",
-            ("2027 Yılbaşı Gizli Hediye Çekilişi 🎁",),
+            "UPDATE settings SET value = ? WHERE key = ? AND value LIKE ?",
+            ("2027 Yılbaşı Gizli Hediye Çekilişi 🎁", "draw_title", "%2026%"),
         )
 
         conn.commit()
