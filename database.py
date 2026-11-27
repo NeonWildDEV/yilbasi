@@ -1,9 +1,13 @@
 import sqlite3
 import os
 import hashlib
+import threading
 from typing import Optional
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "cekilis.db")
+
+_pg_pool = None
+_pool_lock = threading.Lock()
 
 
 def get_database_url() -> Optional[str]:
@@ -22,6 +26,34 @@ def get_database_url() -> Optional[str]:
 
 def is_postgres() -> bool:
     return get_database_url() is not None
+
+
+def _get_pg_pool():
+    global _pg_pool
+    if _pg_pool is not None:
+        return _pg_pool
+    with _pool_lock:
+        if _pg_pool is not None:
+            return _pg_pool
+        db_url = get_database_url()
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+
+        _pg_pool = ConnectionPool(
+            conninfo=db_url,
+            min_size=1,
+            max_size=10,
+            max_idle=240,
+            timeout=20,
+            check=ConnectionPool.check_connection,
+            kwargs={
+                "row_factory": dict_row,
+                "prepare_threshold": None,
+                "connect_timeout": 15,
+            },
+            open=True,
+        )
+        return _pg_pool
 
 
 class PostgresCursorWrapper:
@@ -47,8 +79,22 @@ class PostgresCursorWrapper:
 
 
 class PostgresConnectionWrapper:
-    def __init__(self, raw_conn):
+    def __init__(self, pool, raw_conn):
+        self._pool = pool
         self._conn = raw_conn
+        self._closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+        self.close()
+        return False
 
     def cursor(self):
         return PostgresCursorWrapper(self._conn.cursor())
@@ -64,40 +110,57 @@ class PostgresConnectionWrapper:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        if not self._closed:
+            self._closed = True
+            self._pool.putconn(self._conn)
+
+
+class SqliteConnectionWrapper:
+    def __init__(self, raw_conn: sqlite3.Connection):
+        self._conn = raw_conn
+        self._closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+        self.close()
+        return False
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def execute(self, sql: str, params: tuple = ()):
+        return self._conn.execute(sql, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        if not self._closed:
+            self._closed = True
+            self._conn.close()
 
 
 def get_db():
-    db_url = get_database_url()
-    if db_url:
-        import psycopg
-        from psycopg.rows import dict_row
+    if is_postgres():
+        pool = _get_pg_pool()
+        raw_conn = pool.getconn()
+        return PostgresConnectionWrapper(pool, raw_conn)
 
-        try:
-            raw_conn = psycopg.connect(
-                db_url,
-                row_factory=dict_row,
-                prepare_threshold=None,
-                connect_timeout=20,
-            )
-        except psycopg.OperationalError as e:
-            if "channel_binding" in str(e) and "channel_binding=require" in db_url:
-                fallback_url = db_url.replace("channel_binding=require", "channel_binding=prefer")
-                raw_conn = psycopg.connect(
-                    fallback_url,
-                    row_factory=dict_row,
-                    prepare_threshold=None,
-                    connect_timeout=20,
-                )
-            else:
-                raise
-        return PostgresConnectionWrapper(raw_conn)
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    return SqliteConnectionWrapper(conn)
 
 
 def hash_password(password: str) -> str:
@@ -107,79 +170,78 @@ def hash_password(password: str) -> str:
 
 
 def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    pg = is_postgres()
-    id_col = "SERIAL PRIMARY KEY" if pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    with get_db() as conn:
+        cursor = conn.cursor()
+        pg = is_postgres()
+        id_col = "SERIAL PRIMARY KEY" if pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-    # Kullanıcılar Tablosu
-    cursor.execute(f"""
-    CREATE TABLE IF NOT EXISTS users (
-        id {id_col},
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        display_name TEXT NOT NULL,
-        wishlist TEXT DEFAULT '',
-        has_opened_envelope INTEGER DEFAULT 0,
-        is_admin INTEGER DEFAULT 0,
-        avatar_icon TEXT DEFAULT '🎅',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
+        # Kullanıcılar Tablosu
+        cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS users (
+            id {id_col},
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            wishlist TEXT DEFAULT '',
+            has_opened_envelope INTEGER DEFAULT 0,
+            is_admin INTEGER DEFAULT 0,
+            avatar_icon TEXT DEFAULT '🎅',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
 
-    # Çekiliş Durumu Tablosu
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
-    );
-    """)
+        # Çekiliş Durumu Tablosu
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        """)
 
-    # Eşleşmeler Tablosu (Gizli Kura Sonuçları)
-    cursor.execute(f"""
-    CREATE TABLE IF NOT EXISTS matches (
-        id {id_col},
-        giver_id INTEGER NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
-        receiver_id INTEGER NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
+        # Eşleşmeler Tablosu (Gizli Kura Sonuçları)
+        cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS matches (
+            id {id_col},
+            giver_id INTEGER NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
+            receiver_id INTEGER NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
 
-    # Kalıcı Oturumlar Tablosu (Sunucu yeniden başlasa bile oturumlar düşmez)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS sessions (
-        token TEXT PRIMARY KEY,
-        user_id INTEGER REFERENCES users (id) ON DELETE CASCADE,
-        is_admin INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
+        # Kalıcı Oturumlar Tablosu (Sunucu yeniden başlasa bile oturumlar düşmez)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER REFERENCES users (id) ON DELETE CASCADE,
+            is_admin INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
 
-    # Canlı Akış Bildirimleri Tablosu
-    cursor.execute(f"""
-    CREATE TABLE IF NOT EXISTS live_feed (
-        id {id_col},
-        event_type TEXT NOT NULL,
-        message TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
+        # Canlı Akış Bildirimleri Tablosu
+        cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS live_feed (
+            id {id_col},
+            event_type TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
 
-    # Varsayılan ayarları yükle
-    default_settings = [
-        ("is_drawn", "0"),
-        ("draw_title", "2026 Yılbaşı Gizli Hediye Çekilişi 🎁"),
-        ("budget_hint", "Önerilen Hediye Bütçesi: 250 - 500 TL"),
-        ("admin_password", "admin123"),
-    ]
-    for k, v in default_settings:
-        cursor.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING",
-            (k, v),
-        )
+        # Varsayılan ayarları yükle
+        default_settings = [
+            ("is_drawn", "0"),
+            ("draw_title", "2026 Yılbaşı Gizli Hediye Çekilişi 🎁"),
+            ("budget_hint", "Önerilen Hediye Bütçesi: 250 - 500 TL"),
+            ("admin_password", "admin123"),
+        ]
+        for k, v in default_settings:
+            cursor.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING",
+                (k, v),
+            )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 if __name__ == "__main__":

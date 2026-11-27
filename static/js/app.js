@@ -137,19 +137,66 @@ function setupForms() {
         });
     }
 
+    let isOpeningEnvelope = false;
     const triggerOpen = async () => {
+        if (isOpeningEnvelope) return;
+        isOpeningEnvelope = true;
+        const originalBtnText = openEnvelopeBtn ? openEnvelopeBtn.textContent : "";
+        if (openEnvelopeBtn) {
+            openEnvelopeBtn.disabled = true;
+            openEnvelopeBtn.textContent = "✉️ Zarf Açılıyor...";
+        }
         try {
             const res = await fetch("/api/open-envelope", { method: "POST" });
+            const data = await res.json();
             if (res.ok) {
                 playChime();
                 triggerConfetti();
-                setTimeout(() => checkAuth(), 500);
+                if (data.receiver) {
+                    showRevealedReceiver(data.receiver);
+                } else {
+                    await checkAuth();
+                }
+            } else {
+                alert(data.detail || "Zarf açılırken hata oluştu, lütfen tekrar deneyin.");
             }
-        } catch (e) {}
+        } catch (e) {
+            await checkAuth();
+        } finally {
+            isOpeningEnvelope = false;
+            if (openEnvelopeBtn) {
+                openEnvelopeBtn.disabled = false;
+                openEnvelopeBtn.textContent = originalBtnText;
+            }
+        }
     };
 
     if (openEnvelopeBtn) openEnvelopeBtn.addEventListener("click", triggerOpen);
     if (envelopeClickArea) envelopeClickArea.addEventListener("click", triggerOpen);
+}
+
+function showRevealedReceiver(receiver) {
+    const sealedEnvelopeView = document.getElementById("sealedEnvelopeView");
+    const revealedResultView = document.getElementById("revealedResultView");
+    if (!receiver || !sealedEnvelopeView || !revealedResultView) return;
+
+    sealedEnvelopeView.classList.add("hidden");
+    revealedResultView.classList.remove("hidden");
+
+    document.getElementById("targetAvatar").textContent = receiver.avatar_icon || "🎁";
+    document.getElementById("targetName").textContent = receiver.display_name;
+    document.getElementById("targetNameShort").textContent = receiver.display_name.split(" ")[0];
+
+    const wishBox = document.getElementById("targetWishlistBox");
+    const wishEl = document.getElementById("targetWishlist");
+    if (wishBox && wishEl) {
+        if (receiver.wishlist && receiver.wishlist.trim()) {
+            wishEl.textContent = `"${receiver.wishlist}"`;
+            wishBox.classList.remove("hidden");
+        } else {
+            wishBox.classList.add("hidden");
+        }
+    }
 }
 
 async function checkAuth() {
@@ -202,23 +249,7 @@ async function checkAuth() {
                 sealedEnvelopeView.classList.remove("hidden");
                 revealedResultView.classList.add("hidden");
             } else if (data.receiver) {
-                sealedEnvelopeView.classList.add("hidden");
-                revealedResultView.classList.remove("hidden");
-
-                document.getElementById("targetAvatar").textContent = data.receiver.avatar_icon || "🎁";
-                document.getElementById("targetName").textContent = data.receiver.display_name;
-                document.getElementById("targetNameShort").textContent = data.receiver.display_name.split(" ")[0];
-
-                const wishBox = document.getElementById("targetWishlistBox");
-                const wishEl = document.getElementById("targetWishlist");
-                if (wishBox && wishEl) {
-                    if (data.receiver.wishlist && data.receiver.wishlist.trim()) {
-                        wishEl.textContent = `"${data.receiver.wishlist}"`;
-                        wishBox.classList.remove("hidden");
-                    } else {
-                        wishBox.classList.add("hidden");
-                    }
-                }
+                showRevealedReceiver(data.receiver);
             }
         }
     } catch (e) {
