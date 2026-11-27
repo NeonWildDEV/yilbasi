@@ -62,8 +62,9 @@
                         <span class="text-xs text-gray-400 uppercase tracking-widest font-bold">Kura Durumu</span>
                         <div class="text-2xl font-black mt-1" id="drawStatusText">Bekleniyor</div>
                     </div>
-                    <div class="mt-3 text-xs text-gray-400">
-                        Toplam: <span id="totalUsersCount" class="font-bold text-white">0</span> katılımcı
+                    <div class="mt-3 flex flex-col gap-1.5 text-xs text-gray-400">
+                        <div>Toplam: <span id="totalUsersCount" class="font-bold text-white">0</span> katılımcı</div>
+                        <div id="dbModeBadge" class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-800 text-gray-300 w-fit"></div>
                     </div>
                 </div>
 
@@ -213,6 +214,17 @@
         function renderOverview(data) {
             document.getElementById("totalUsersCount").textContent = data.users.length;
             document.getElementById("userListCount").textContent = data.users.length;
+
+            const dbBadge = document.getElementById("dbModeBadge");
+            if (dbBadge) {
+                if (data.db_mode === "postgresql") {
+                    dbBadge.textContent = "🟢 Kalıcı Bulut DB (PostgreSQL)";
+                    dbBadge.className = "inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 w-fit";
+                } else {
+                    dbBadge.textContent = "🟡 Geçici DB (SQLite - DATABASE_URL bekliyor)";
+                    dbBadge.className = "inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-amber-950/80 text-amber-400 border border-amber-800/80 w-fit";
+                }
+            }
 
             const statusText = document.getElementById("drawStatusText");
             if (data.is_drawn) {

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from database import get_db, init_db, hash_password
+from database import get_db, init_db, hash_password, is_postgres
 from secret_santa import generate_secret_santa_matches
 
 init_db()
@@ -25,9 +25,7 @@ os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# Basit bellek içi oturum yönetimi
-SESSIONS: Dict[str, int] = {}       # session_token -> user_id
-ADMIN_SESSIONS: set = set()          # admin session tokens
+# Kalıcı oturum yönetimi veritabanındaki 'sessions' tablosu üzerinden yapılır.
 
 # WebSocket Bağlantı Yöneticisi (Canlı Yayın Ekranı ve Katılımcılar İçin)
 class ConnectionManager:
@@ -70,13 +68,46 @@ class WishlistUpdateRequest(BaseModel):
     wishlist: str
 
 # --- Yardımcı Fonksiyonlar ---
+def create_session(user_id: Optional[int] = None, is_admin: bool = False) -> str:
+    token = secrets.token_hex(24)
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO sessions (token, user_id, is_admin) VALUES (?, ?, ?)",
+        (token, user_id, 1 if is_admin else 0),
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+def delete_session(token: Optional[str]):
+    if not token:
+        return
+    conn = get_db()
+    conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+
 def get_current_user_id(session_token: Optional[str] = Cookie(None)) -> Optional[int]:
-    if session_token and session_token in SESSIONS:
-        return SESSIONS[session_token]
-    return None
+    if not session_token:
+        return None
+    conn = get_db()
+    row = conn.execute(
+        "SELECT user_id FROM sessions WHERE token = ? AND is_admin = 0",
+        (session_token,),
+    ).fetchone()
+    conn.close()
+    return row["user_id"] if row and row["user_id"] else None
 
 def is_admin_authenticated(admin_token: Optional[str] = Cookie(None)) -> bool:
-    return admin_token is not None and admin_token in ADMIN_SESSIONS
+    if not admin_token:
+        return False
+    conn = get_db()
+    row = conn.execute(
+        "SELECT token FROM sessions WHERE token = ? AND is_admin = 1",
+        (admin_token,),
+    ).fetchone()
+    conn.close()
+    return row is not None
 
 def get_setting(key: str, default: str = "") -> str:
     conn = get_db()
@@ -86,7 +117,10 @@ def get_setting(key: str, default: str = "") -> str:
 
 def set_setting(key: str, value: str):
     conn = get_db()
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        (key, value),
+    )
     conn.commit()
     conn.close()
 
@@ -206,13 +240,13 @@ async def register(req: RegisterRequest, response: Response):
         INSERT INTO users (username, password_hash, display_name, wishlist, avatar_icon)
         VALUES (?, ?, ?, ?, ?)
     """, (username, pwd_hash, display_name, req.wishlist.strip(), req.avatar_icon or "🎅"))
-    user_id = cursor.lastrowid
     conn.commit()
+    created_row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    user_id = created_row["id"]
     conn.close()
     
-    token = secrets.token_hex(16)
-    SESSIONS[token] = user_id
-    response.set_cookie(key="session_token", value=token, httponly=True, max_age=86400*7)
+    token = create_session(user_id=user_id, is_admin=False)
+    response.set_cookie(key="session_token", value=token, httponly=True, samesite="lax", max_age=86400*30)
     
     # Canlı ekrana anlık katılım yayını yap
     stats = get_public_stats_data()
@@ -239,15 +273,13 @@ async def login(req: LoginRequest, response: Response):
     if not user:
         raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı!")
         
-    token = secrets.token_hex(16)
-    SESSIONS[token] = user["id"]
-    response.set_cookie(key="session_token", value=token, httponly=True, max_age=86400*7)
+    token = create_session(user_id=user["id"], is_admin=False)
+    response.set_cookie(key="session_token", value=token, httponly=True, samesite="lax", max_age=86400*30)
     return {"success": True, "display_name": user["display_name"]}
 
 @app.post("/api/logout")
 async def logout(response: Response, session_token: Optional[str] = Cookie(None)):
-    if session_token in SESSIONS:
-        del SESSIONS[session_token]
+    delete_session(session_token)
     response.delete_cookie("session_token")
     return {"success": True}
 
@@ -344,9 +376,8 @@ async def admin_login(req: AdminLoginRequest, response: Response):
     if req.password != expected_pwd:
         raise HTTPException(status_code=401, detail="Hatalı şifre!")
         
-    token = secrets.token_hex(16)
-    ADMIN_SESSIONS.add(token)
-    response.set_cookie(key="admin_token", value=token, httponly=True, max_age=86400)
+    token = create_session(user_id=None, is_admin=True)
+    response.set_cookie(key="admin_token", value=token, httponly=True, samesite="lax", max_age=86400*7)
     return {"success": True}
 
 @app.get("/api/admin/overview")
@@ -389,7 +420,8 @@ async def admin_overview(is_admin: bool = Depends(is_admin_authenticated)):
         "is_drawn": is_drawn,
         "draw_title": draw_title,
         "budget_hint": budget_hint,
-        "matches": matches
+        "matches": matches,
+        "db_mode": "postgresql" if is_postgres() else "sqlite",
     }
 
 @app.post("/api/admin/draw")
@@ -535,14 +567,13 @@ async def add_test_users(is_admin: bool = Depends(is_admin_authenticated)):
     
     added = 0
     for uname, dname, avatar, wish in sample_users:
-        try:
-            cursor.execute("""
-                INSERT INTO users (username, password_hash, display_name, wishlist, avatar_icon)
-                VALUES (?, ?, ?, ?, ?)
-            """, (uname, pwd_hash, dname, wish, avatar))
+        cursor.execute("""
+            INSERT INTO users (username, password_hash, display_name, wishlist, avatar_icon)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (username) DO NOTHING
+        """, (uname, pwd_hash, dname, wish, avatar))
+        if cursor.rowcount and cursor.rowcount > 0:
             added += 1
-        except Exception:
-            pass # Zaten varsa atla
             
     conn.commit()
     conn.close()
